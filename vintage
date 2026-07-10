@@ -1,5 +1,5 @@
--- VintageUI Library v3
--- Precise recreation with accurate diagonal alternating slice animations
+-- VintageUI Library v4
+-- Precise recreation with tilted diagonal slice animations
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -88,13 +88,20 @@ local function MakeDraggable(frame, dragHandle)
 end
 
 -- ============================================
--- DIAGONAL SLICE ANIMATION (Alternating Up/Down)
+-- TILTED DIAGONAL SLICE ANIMATION
 -- ============================================
-local function DiagonalSliceAnimation(parent, direction, onComplete)
-    local sliceCount = 12
+local function TiltedSliceAnimation(parent, direction, onComplete)
+    local sliceCount = 10
     local slices = {}
     local parentSize = parent.AbsoluteSize
-    local sliceWidth = math.ceil(parentSize.X / sliceCount) + 2
+    local parentPos = parent.AbsolutePosition
+
+    -- The tilt angle (rotated to the left / counter-clockwise)
+    local tiltAngle = -15 -- degrees, tilted to the left
+
+    -- Calculate slice dimensions to cover the tilted area
+    local sliceWidth = math.ceil(parentSize.X / sliceCount) + 20
+    local sliceHeight = parentSize.Y + 100 -- Extra height for rotation coverage
 
     local CoverFrame = Create("Frame", {
         Name = "AnimationCover",
@@ -103,19 +110,21 @@ local function DiagonalSliceAnimation(parent, direction, onComplete)
         Size = UDim2.new(1, 0, 1, 0),
         Position = UDim2.new(0, 0, 0, 0),
         ZIndex = 1000,
-        ClipsDescendants = true,
+        ClipsDescendants = false,
     })
 
     for i = 1, sliceCount do
         local isEven = i % 2 == 0
 
+        -- Create tilted slice
         local slice = Create("Frame", {
             Name = "Slice" .. i,
             Parent = CoverFrame,
             BackgroundColor3 = Colors.Background,
             BorderSizePixel = 0,
-            Size = UDim2.new(0, sliceWidth, 1, 0),
-            Position = UDim2.new(0, (i - 1) * sliceWidth, 0, 0),
+            Size = UDim2.new(0, sliceWidth, 0, sliceHeight),
+            Position = UDim2.new(0, (i - 1) * (parentSize.X / sliceCount) - 10, 0, -50),
+            Rotation = tiltAngle,
             ZIndex = 1000,
         })
 
@@ -124,26 +133,34 @@ local function DiagonalSliceAnimation(parent, direction, onComplete)
 
     if direction == "in" then
         -- OPENING: Slices slide AWAY to reveal UI underneath
-        -- Odd slices: slide UP and LEFT (negative Y, negative X offset)
-        -- Even slices: slide DOWN and RIGHT (positive Y, positive X offset)
+        -- The main UI is already visible at 80% opacity underneath
+
+        -- First, make the main UI visible at 80% during animation
+        local originalTransparency = parent.BackgroundTransparency
+        parent.BackgroundTransparency = 0.2 -- 80% visible
+
         for _, sliceData in ipairs(slices) do
             local slice = sliceData.Frame
             local isEven = sliceData.IsEven
             local index = sliceData.Index
 
-            -- Alternating diagonal directions
-            local endOffsetX = isEven and 100 or -100
-            local endOffsetY = isEven and (parentSize.Y + 80) or -(parentSize.Y + 80)
+            -- Alternating diagonal slide directions
+            -- Odd slices: slide UP and LEFT (more diagonal)
+            -- Even slices: slide DOWN and RIGHT
+            local endOffsetX = isEven and 150 or -150
+            local endOffsetY = isEven and (parentSize.Y + 100) or -(parentSize.Y + 100)
 
-            local delayTime = (index - 1) * 0.08
+            local delayTime = (index - 1) * 0.1
 
             Tween(slice, {
                 Position = UDim2.new(0, slice.Position.X.Offset + endOffsetX, 0, endOffsetY),
                 BackgroundTransparency = 1,
-            }, 0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In, delayTime)
+            }, 1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In, delayTime)
         end
 
+        -- Restore full opacity after animation
         task.delay(1.5, function()
+            parent.BackgroundTransparency = originalTransparency
             CoverFrame:Destroy()
             if onComplete then onComplete() end
         end)
@@ -155,19 +172,19 @@ local function DiagonalSliceAnimation(parent, direction, onComplete)
             local isEven = sliceData.IsEven
             local index = sliceData.Index
 
-            -- Start from opposite diagonal directions
-            local startOffsetX = isEven and 100 or -100
-            local startOffsetY = isEven and (parentSize.Y + 80) or -(parentSize.Y + 80)
+            -- Start from off-screen diagonal positions
+            local startOffsetX = isEven and 150 or -150
+            local startOffsetY = isEven and (parentSize.Y + 100) or -(parentSize.Y + 100)
 
             slice.Position = UDim2.new(0, slice.Position.X.Offset + startOffsetX, 0, startOffsetY)
             slice.BackgroundTransparency = 1
 
-            local delayTime = (index - 1) * 0.08
+            local delayTime = (index - 1) * 0.1
 
             Tween(slice, {
-                Position = UDim2.new(0, (index - 1) * sliceWidth, 0, 0),
+                Position = UDim2.new(0, (index - 1) * (parentSize.X / sliceCount) - 10, 0, -50),
                 BackgroundTransparency = 0,
-            }, 0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, delayTime)
+            }, 1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, delayTime)
         end
 
         task.delay(1.5, function()
@@ -211,20 +228,18 @@ function VintageUI:CreateWindow(config)
 
     -- Title Bar
     local TitleBar = Create("Frame", {
-        Name = "TitleBar",
-        Parent = MainFrame,
-        BackgroundColor3 = Colors.TitleBar,
-        BorderSizePixel = 0,
+        Name = "TitleBar", Parent = MainFrame,
+        BackgroundColor3 = Colors.TitleBar, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, 26),
     })
 
-    local TitleCorner = Create("UICorner", {CornerRadius = UDim.new(0, 3), Parent = TitleBar})
-    local TitleFix = Create("Frame", {Parent = TitleBar, BackgroundColor3 = Colors.TitleBar, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0)})
+    Create("UICorner", {CornerRadius = UDim.new(0, 3), Parent = TitleBar})
+    Create("Frame", {Parent = TitleBar, BackgroundColor3 = Colors.TitleBar, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0)})
 
     local TitleIcon = Create("Frame", {Name = "TitleIcon", Parent = TitleBar, BackgroundColor3 = Colors.White, BorderSizePixel = 0, Size = UDim2.new(0, 7, 0, 7), Position = UDim2.new(0, 8, 0.5, -3)})
     Create("UICorner", {CornerRadius = UDim.new(0, 1), Parent = TitleIcon})
 
-    local TitleText = Create("TextLabel", {
+    Create("TextLabel", {
         Name = "TitleText", Parent = TitleBar, BackgroundTransparency = 1,
         Text = title, TextColor3 = Colors.TitleBarText, TextSize = 12,
         Font = Enum.Font.GothamBold, Size = UDim2.new(0, 200, 1, 0),
@@ -291,7 +306,7 @@ function VintageUI:CreateWindow(config)
     task.delay(0.1, function()
         MainFrame.Visible = true
         window.IsAnimating = true
-        DiagonalSliceAnimation(MainFrame, "in", function()
+        TiltedSliceAnimation(MainFrame, "in", function()
             window.IsAnimating = false
         end)
     end)
@@ -309,11 +324,11 @@ function VintageUI:Toggle()
 
     if self.IsVisible then
         self.MainFrame.Visible = true
-        DiagonalSliceAnimation(self.MainFrame, "in", function()
+        TiltedSliceAnimation(self.MainFrame, "in", function()
             self.IsAnimating = false
         end)
     else
-        DiagonalSliceAnimation(self.MainFrame, "out", function()
+        TiltedSliceAnimation(self.MainFrame, "out", function()
             self.MainFrame.Visible = false
             self.IsAnimating = false
         end)
@@ -417,7 +432,7 @@ function VintageUI:AddButton(tab, config)
     local ButtonIcon = Create("Frame", {Name = "Icon", Parent = ButtonFrame, BackgroundColor3 = Colors.ElementText, BorderSizePixel = 0, Size = UDim2.new(0, 7, 0, 7), Position = UDim2.new(0, 8, 0.5, -3)})
     Create("UICorner", {CornerRadius = UDim.new(0, 1), Parent = ButtonIcon})
 
-    local ButtonText = Create("TextLabel", {
+    Create("TextLabel", {
         Name = "Text", Parent = ButtonFrame, BackgroundTransparency = 1,
         Text = text, TextColor3 = Colors.ElementText, TextSize = 11,
         Font = Enum.Font.Gotham, Size = UDim2.new(1, -24, 1, 0),
@@ -430,34 +445,27 @@ function VintageUI:AddButton(tab, config)
     })
 
     local isHovered = false
-
     ClickButton.MouseEnter:Connect(function()
         isHovered = true
         Tween(ButtonFrame, {BackgroundColor3 = Colors.ElementHover}, 0.15)
     end)
-
     ClickButton.MouseLeave:Connect(function()
         isHovered = false
         Tween(ButtonFrame, {BackgroundColor3 = Colors.ElementBg}, 0.15)
     end)
-
     ClickButton.MouseButton1Down:Connect(function()
         Tween(ButtonFrame, {BackgroundColor3 = Colors.ElementClick}, 0.08)
     end)
-
     ClickButton.MouseButton1Up:Connect(function()
         Tween(ButtonFrame, {BackgroundColor3 = isHovered and Colors.ElementHover or Colors.ElementBg}, 0.1)
     end)
-
-    ClickButton.MouseButton1Click:Connect(function()
-        callback()
-    end)
+    ClickButton.MouseButton1Click:Connect(function() callback() end)
 
     return ButtonFrame
 end
 
 -- ============================================
--- ADD SLIDER (with smooth handle animation)
+-- ADD SLIDER
 -- ============================================
 function VintageUI:AddSlider(tab, config)
     config = config or {}
@@ -476,7 +484,7 @@ function VintageUI:AddSlider(tab, config)
     local SliderIcon = Create("Frame", {Name = "Icon", Parent = SliderFrame, BackgroundColor3 = Colors.ElementText, BorderSizePixel = 0, Size = UDim2.new(0, 7, 0, 7), Position = UDim2.new(0, 8, 0, 6)})
     Create("UICorner", {CornerRadius = UDim.new(0, 1), Parent = SliderIcon})
 
-    local SliderLabel = Create("TextLabel", {
+    Create("TextLabel", {
         Name = "Label", Parent = SliderFrame, BackgroundTransparency = 1,
         Text = text, TextColor3 = Colors.ElementText, TextSize = 11,
         Font = Enum.Font.Gotham, Size = UDim2.new(0.3, 0, 0, 16),
@@ -510,7 +518,6 @@ function VintageUI:AddSlider(tab, config)
     })
     Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Handle})
 
-    -- Glow effect
     local HandleGlow = Create("Frame", {
         Name = "Glow", Parent = Handle, BackgroundColor3 = Colors.SliderHandle,
         BackgroundTransparency = 0.7, BorderSizePixel = 0,
@@ -574,19 +581,16 @@ function VintageUI:AddSlider(tab, config)
         isSliderHovered = true
         Tween(SliderFrame, {BackgroundColor3 = Colors.ElementHover}, 0.15)
     end)
-
     SliderFrame.MouseLeave:Connect(function()
         isSliderHovered = false
-        if not dragging then
-            Tween(SliderFrame, {BackgroundColor3 = Colors.ElementBg}, 0.15)
-        end
+        if not dragging then Tween(SliderFrame, {BackgroundColor3 = Colors.ElementBg}, 0.15) end
     end)
 
     return SliderFrame
 end
 
 -- ============================================
--- ADD TOGGLE (with text color animation)
+-- ADD TOGGLE
 -- ============================================
 function VintageUI:AddToggle(tab, config)
     config = config or {}
@@ -603,7 +607,7 @@ function VintageUI:AddToggle(tab, config)
     local ToggleIcon = Create("Frame", {Name = "Icon", Parent = ToggleFrame, BackgroundColor3 = Colors.ElementText, BorderSizePixel = 0, Size = UDim2.new(0, 7, 0, 7), Position = UDim2.new(0, 8, 0.5, -3)})
     Create("UICorner", {CornerRadius = UDim.new(0, 1), Parent = ToggleIcon})
 
-    local ToggleLabel = Create("TextLabel", {
+    Create("TextLabel", {
         Name = "Label", Parent = ToggleFrame, BackgroundTransparency = 1,
         Text = text, TextColor3 = Colors.ElementText, TextSize = 11,
         Font = Enum.Font.Gotham, Size = UDim2.new(0.5, 0, 1, 0),
@@ -643,20 +647,16 @@ function VintageUI:AddToggle(tab, config)
         isToggleHovered = true
         Tween(ToggleFrame, {BackgroundColor3 = Colors.ElementHover}, 0.15)
     end)
-
     ClickArea.MouseLeave:Connect(function()
         isToggleHovered = false
         Tween(ToggleFrame, {BackgroundColor3 = Colors.ElementBg}, 0.15)
     end)
-
     ClickArea.MouseButton1Down:Connect(function()
         Tween(ToggleFrame, {BackgroundColor3 = Colors.ElementClick}, 0.08)
     end)
-
     ClickArea.MouseButton1Up:Connect(function()
         Tween(ToggleFrame, {BackgroundColor3 = isToggleHovered and Colors.ElementHover or Colors.ElementBg}, 0.1)
     end)
-
     ClickArea.MouseButton1Click:Connect(UpdateToggle)
 
     return ToggleFrame
@@ -668,10 +668,8 @@ end
 function VintageUI:AddLabel(tab, config)
     config = config or {}
     local text = config.Text or "Label"
-
     local LabelFrame = Create("Frame", {Name = text .. "Label", Parent = tab.Content, BackgroundTransparency = 1, Size = UDim2.new(1, -4, 0, 20)})
     Create("TextLabel", {Name = "Text", Parent = LabelFrame, BackgroundTransparency = 1, Text = text, TextColor3 = Colors.ElementText, TextSize = 11, Font = Enum.Font.Gotham, Size = UDim2.new(1, 0, 1, 0), TextXAlignment = Enum.TextXAlignment.Left})
-
     return LabelFrame
 end
 
@@ -690,7 +688,6 @@ function VintageUI:Notify(config)
     })
     Create("UICorner", {CornerRadius = UDim.new(0, 3), Parent = NotifFrame})
     Create("UIStroke", {Color = Colors.Border, Thickness = 1, Parent = NotifFrame})
-
     Create("TextLabel", {
         Name = "Text", Parent = NotifFrame, BackgroundTransparency = 1,
         Text = text, TextColor3 = Colors.ElementText, TextSize = 11,
@@ -739,7 +736,6 @@ function VintageUI:AddDropdown(tab, config)
 
     for _, option in ipairs(options) do
         local OptionBtn = Create("TextButton", {Name = option, Parent = OptionsFrame, BackgroundColor3 = Colors.ElementHover, BorderSizePixel = 0, Text = option, TextColor3 = Colors.ElementText, TextSize = 11, Font = Enum.Font.Gotham, Size = UDim2.new(1, 0, 0, 24), AutoButtonColor = false})
-
         OptionBtn.MouseEnter:Connect(function() Tween(OptionBtn, {BackgroundColor3 = Colors.ElementClick}, 0.1) end)
         OptionBtn.MouseLeave:Connect(function() Tween(OptionBtn, {BackgroundColor3 = Colors.ElementHover}, 0.1) end)
         OptionBtn.MouseButton1Click:Connect(function()
